@@ -33,7 +33,8 @@ class ScaleActor(vtkTextActor):
     def update_scale(self, scale):
         if self._config:
             q = self._config.spacing
-            self.SetInput(f'scale: 1 px = {q.scale(scale):#.2q}')
+            # self.SetInput(f'scale: 1 px = {q.scale(scale):#.2q}')
+            self.SetInput('')
             self.SetVisibility(True)
         else:
             # nothing to do since we don't have any scale information
@@ -367,7 +368,7 @@ class Quad(Base):
             with vuetify.VCol(cols='auto'):
                 with vuetify.VBtn(click=self.reset_cameras, small=True, tile=True):
                     vuetify.VIcon("mdi-fit-to-screen", left=True)
-                    html.Pre("Reset Views")
+                    html.Pre("Reset Zoom")
 
         # setup popup dialog for selecting regions
         if self._segmentation_view is not None:
@@ -470,7 +471,7 @@ class Quad(Base):
 
         # add annotation text
         text = simple.Text()
-        text.Text = f'{CONSTANTS.AxisNames[axis]}: {self._active_subsampling_factor * val}'
+        text.Text = f'{CONSTANTS.AxisNames[axis]}: {(self._active_subsampling_factor * val) + 1}'
         textDisplay = simple.Show(text, self._views[axis])
         textDisplay.Color = CONSTANTS.Colors[axis]
         textDisplay.FontSize = 16
@@ -487,7 +488,7 @@ class Quad(Base):
             self._state[f'slice_{axis}'] = self._slices[axis].VOI[axis*2] = self._slices[axis].VOI[axis*2+1] = val
             setattr(self._outline, CONSTANTS.OutlinePropertyNames[axis], [val])
             self._outline.UpdateVTKObjects()
-            text.Text = f'{CONSTANTS.AxisNames[axis]}: {self._active_subsampling_factor * val}'
+            text.Text = f'{CONSTANTS.AxisNames[axis]}: {(self._active_subsampling_factor * val) + 1}'
             self.update_html_views()
             Base.propagate_changes_to_linked_views(self)
 

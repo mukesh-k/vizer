@@ -76,6 +76,8 @@ class RawConfig:
         if path.isfile(json_file):
             log.info(f'extracting metadata from json file: {json_file}')
             return RawConfig.extract_config_from_json(json_file, filename)
+        else:
+            log.info('json file not available')
 
         # next, try legacy txt file format
         txt_file = path.splitext(filename)[0] + '.txt'

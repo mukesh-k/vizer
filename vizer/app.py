@@ -20,11 +20,14 @@ log = utils.get_logger(__name__)
 def create_view(filename, args):
     """Creates a view from a dataset metadata."""
     # read dataset metadata
-    meta = readers.Metadata(filename)
-    log.info(f'metadata: {meta}')
-    view = views.create(meta, args)
-    log.info("created view '%s'", view.__class__.__name__)
-    return view
+    try:
+        meta = readers.Metadata(filename, args)
+        log.info(f'metadata: {meta}')
+        view = views.create(meta, args)
+        log.info("created view '%s'", view.__class__.__name__)
+        return view
+    except Exception as err:
+        log.error(err)
 
 
 def exec():
@@ -41,14 +44,14 @@ def exec():
                             help='specify image sub-sampling factor', default=1, type=int)
     server.cli.add_argument('--force-view', help="force view type (primarily for debugging)", default=None,
                             choices=views.get_view_types())
-    server.cli.add_argument('--link-views', help='link interaction between views of same time (default: True)',
+    server.cli.add_argument('--link-views', help='link interaction between views of same time (default: false)',
                             default=False, action='store_true')
     server.cli.add_argument('--legend-visibility', help='color legend visibility (default: "never")', default='never',
                             type=str, choices=['never', 'auto'])
+    server.cli.add_argument('--metadata-props', help='dataset(s) metadata properties', required=False, action='append')
     # server.cli.add_argument('--segmentation', help='if supported, enable segmentation support (default: False)', default=False, action='store_true')
     # parse args
     args = server.cli.parse_known_args()[0]
-
     all_views = [create_view(dataset.format_map(os.environ), args) for dataset in args.dataset]
 
     layout = VAppLayout(server)

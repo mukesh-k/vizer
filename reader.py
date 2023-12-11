@@ -10,7 +10,7 @@ parser.add_argument('--use-vtk-reader',
 
 # parse args
 args = parser.parse_known_args()[0]
-meta = Metadata(args.dataset)
+meta = Metadata(args.dataset, args)
 dataset, needs_async = meta.sync_read_dataset(args)
 
 if needs_async:

@@ -1,0 +1,15 @@
+{
+    "volume_count": 1,
+    "volumes": [{
+            "volume_filename": "__filename__",
+            "volume_metadata": {
+                "voxel": 0,
+                "bitrate": "__bitrate__",
+                "xdim": 0,
+                "ydim": 0,
+                "zdim": 0,
+                "type": "grayscale"
+            }
+        }
+    ]
+}

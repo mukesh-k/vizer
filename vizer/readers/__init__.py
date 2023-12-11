@@ -13,7 +13,11 @@ from vtkmodules.numpy_interface import dataset_adapter as dsa
 
 from . import raw_reader
 
+GRAYSCALE_TMPL_JSON = '/opt/vizer/vizer/templates/dataset-grayscale-tmpl.json'
+SEGMENTATION_TMPL_JSON = '/opt/vizer/vizer/templates/dataset-segmentation-tmpl.json'
+
 log = utils.get_logger(__name__)
+
 
 class RawConfig:
     def __init__(self) -> None:
@@ -37,25 +41,25 @@ class RawConfig:
     @property
     def vtk_scalar_type(self):
         if self.unsigned:
-            typeMap = {8 : vtk.VTK_UNSIGNED_CHAR,
-             16: vtk.VTK_UNSIGNED_SHORT,
-             32: vtk.VTK_UNSIGNED_INT,
-             64: vtk.VTK_UNSIGNED_LONG}
+            typeMap = {8: vtk.VTK_UNSIGNED_CHAR,
+                       16: vtk.VTK_UNSIGNED_SHORT,
+                       32: vtk.VTK_UNSIGNED_INT,
+                       64: vtk.VTK_UNSIGNED_LONG}
         else:
-            typeMap = {8 : vtk.VTK_CHAR,
-             16: vtk.VTK_SHORT,
-             32: vtk.VTK_INT,
-             64: vtk.VTK_LONG}
+            typeMap = {8: vtk.VTK_CHAR,
+                       16: vtk.VTK_SHORT,
+                       32: vtk.VTK_INT,
+                       64: vtk.VTK_LONG}
         return typeMap.get(self.bits, None)
 
     @property
     def vtk_extent(self):
-        return [0, self.dims[0]-1, 0, self.dims[1]-1, 0, self.dims[2]-1]
+        return [0, self.dims[0] - 1, 0, self.dims[1] - 1, 0, self.dims[2] - 1]
 
     @property
     def vtk_spacing(self):
         return [1.0, 1.0, 1.0]
-    
+
     @property
     def vtk_origin(self):
         return [0.0, 0.0, 0.0]
@@ -69,7 +73,8 @@ class RawConfig:
             return f'int{self.bits}'
 
     @staticmethod
-    def extract_config(filename):
+    def extract_config(filename, props):
+
         """extracts metadata from the file's name"""
         # see if there's a json file with the same name, if so we use that to extract metadata
         json_file = path.splitext(filename)[0] + '.json'
@@ -77,7 +82,13 @@ class RawConfig:
             log.info(f'extracting metadata from json file: {json_file}')
             return RawConfig.extract_config_from_json(json_file, filename)
         else:
-            log.info('json file not available')
+            log.info('json file not available. fetching json file from templates')
+            try:
+                template = Template()
+                data = template.map_template_file(filename, props)
+                return RawConfig.extract_config_from_json(data, filename)
+            except Exception as err:
+                log.error(err)
 
         # next, try legacy txt file format
         txt_file = path.splitext(filename)[0] + '.txt'
@@ -111,14 +122,20 @@ class RawConfig:
             m = sreg2.search(filename)
             if m:
                 group = m.groupdict()
-                num =  group.get('spacing1', '0') + '.' + group.get("spacing2", '0')
+                num = group.get('spacing1', '0') + '.' + group.get("spacing2", '0')
                 unit = group.get('unit', 'm')
                 config.spacing = Quantity(f"{num} {unit}")
         return config if config.is_valid() else None
 
     @staticmethod
     def extract_config_from_json(filename, raw_filename):
-        json_data = json.load(open(filename))
+        try:
+            # map the json object from the file path
+            json_data = json.load(open(filename))
+        except:
+            # map the json object from the input parameters
+            json_data = filename
+
         volume_data = json_data.get('volumes', [{}])[0]
         volume_filename = volume_data.get('volume_filename', None)
         volume_metadata = volume_data.get('volume_metadata', {})
@@ -167,7 +184,7 @@ class RawConfig:
 
         # log.info(f'extracted metadata: {config}')
         return config if config.is_valid() else None
-    
+
     @staticmethod
     def extract_config_from_txt(filename, raw_filename):
         config = RawConfig()
@@ -230,10 +247,13 @@ class RawConfig:
             config.colormap['color'] = numpy.array(colors, dtype=numpy.float32)
         return config if config.is_valid() else None
 
+
 class Metadata:
     """Metadata for a file."""
-    def __init__(self, filename) -> None:
+
+    def __init__(self, filename, args) -> None:
         self.filename = filename
+        self.props = args.metadata_props
         self.vtk_type = None
         self.is_structured = False
         self.raw_config = None
@@ -242,11 +262,11 @@ class Metadata:
             log.error(f'file "{filename}" does not exist')
         else:
             root, ext = path.splitext(filename)
-            
+
             if ext.lower() == ".raw":
                 # read metadata for raw file
-                self.raw_config = RawConfig.extract_config(filename)
-                self.vtk_type = 6 # VTK_IMAGE_DATA
+                self.raw_config = RawConfig.extract_config(filename, self.props)
+                self.vtk_type = 6  # VTK_IMAGE_DATA
                 self.is_structured = True
             else:
                 # use VTK to read metadata
@@ -258,7 +278,7 @@ class Metadata:
                 self.vtk_type = reader.GetDataInformation().GetDataSetType()
                 self.is_structured = reader.GetDataInformation().IsDataStructured()
                 simple.Delete(reader)
-            
+
     def __str__(self) -> str:
         if self.vtk_type is None:
             pretty_type = 'None'
@@ -280,7 +300,8 @@ class Metadata:
         """read data asynchronously"""
         return await async_read(self, args)
 
-def _create_vtk_image_data(raw_config: RawConfig, buffer:numpy.ndarray=None):
+
+def _create_vtk_image_data(raw_config: RawConfig, buffer: numpy.ndarray = None):
     """creates a vtkImageData object with the given dimensions and scalar type"""
     dataset = vtkImageData()
     dataset.SetExtent(raw_config.vtk_extent)
@@ -296,6 +317,7 @@ def _create_vtk_image_data(raw_config: RawConfig, buffer:numpy.ndarray=None):
         log.info(f'buffer range: {nds.PointData["ImageFile"].GetRange()}')
     return dataset
 
+
 def sync_read(meta, args):
     """read data synchronously; may only read dummy data"""
     if meta.is_raw() and not args.use_vtk_reader:
@@ -306,15 +328,16 @@ def sync_read(meta, args):
         # read data synchronously
         if meta.is_raw():
             producer = simple.OpenDataFile(meta.filename,
-                DataScalarType=meta.raw_config.vtk_scalar_type,
-                DataExtent=meta.raw_config.vtk_extent,
-                DataSpacing=meta.raw_config.vtk_spacing,
-                DataByteOrder='LittleEndian')
+                                           DataScalarType=meta.raw_config.vtk_scalar_type,
+                                           DataExtent=meta.raw_config.vtk_extent,
+                                           DataSpacing=meta.raw_config.vtk_spacing,
+                                           DataByteOrder='LittleEndian')
         else:
             producer = simple.OpenDataFile(meta.filename)
         producer.UpdatePipeline()
         dataset = producer.GetClientSideObject().GetOutputDataObject(0)
         return (dataset, False)
+
 
 async def async_read(meta, args):
     """reads data asynchronously"""
@@ -329,3 +352,38 @@ async def async_read(meta, args):
     # the actual reading
     buffer = await asyncio.to_thread(raw_reader.read, meta.filename, meta.raw_config, num_chunks)
     return _create_vtk_image_data(meta.raw_config, buffer)
+
+
+class Template:
+    def __init__(self) -> None:
+        self.filename = None
+        self.props = None
+        self.template_json = None
+        self.input_json = None
+
+    def map_template_file(self, filename, props):
+        """map the dataset json properties using templates"""
+        try:
+            input_json = json.loads(props[0])
+            filetype = input_json['volume_metadata']['type']
+            self.input_json = input_json
+            if filetype is not None and filetype.lower() == "grayscale":
+                with open(GRAYSCALE_TMPL_JSON) as templateFile:
+                    self.template_json = json.load(templateFile)
+            else:
+                with open(SEGMENTATION_TMPL_JSON) as templateFile:
+                    self.template_json = json.load(templateFile)
+
+            if self.template_json is not None:
+                for item in self.template_json['volumes']:
+                    item['volume_filename'] = item['volume_filename'] = filename[filename.rfind('/') + 1:len(filename)]
+                    item['volume_metadata']['voxel'] = self.input_json['volume_metadata']['voxel']
+                    item['volume_metadata']['bitrate'] = self.input_json['volume_metadata']['bitrate']
+                    item['volume_metadata']['xdim'] = self.input_json['volume_metadata']['xdim']
+                    item['volume_metadata']['ydim'] = self.input_json['volume_metadata']['ydim']
+                    item['volume_metadata']['zdim'] = self.input_json['volume_metadata']['zdim']
+            log.info(f'{self.template_json}')
+            return self.template_json
+        except Exception as err:
+            log.error(err)
+            return None

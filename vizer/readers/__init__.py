@@ -82,13 +82,14 @@ class RawConfig:
             log.info(f'extracting metadata from json file: {json_file}')
             return RawConfig.extract_config_from_json(json_file, filename)
         else:
-            log.info('json file not available. fetching json file from templates')
-            try:
-                template = Template()
-                data = template.map_template_file(filename, props)
-                return RawConfig.extract_config_from_json(data, filename)
-            except Exception as err:
-                log.error(err)
+            if props is not None:
+                log.info('json file not available. fetching metadata props from templates')
+                try:
+                    template = Template()
+                    data = template.map_template_file(filename, props)
+                    return RawConfig.extract_config_from_json(data, filename)
+                except Exception as err:
+                    log.error(err)
 
         # next, try legacy txt file format
         txt_file = path.splitext(filename)[0] + '.txt'
@@ -364,25 +365,28 @@ class Template:
     def map_template_file(self, filename, props):
         """map the dataset json properties using templates"""
         try:
-            input_json = json.loads(props[0])
-            filetype = input_json['volume_metadata']['type']
-            self.input_json = input_json
-            if filetype is not None and filetype.lower() == "grayscale":
-                with open(GRAYSCALE_TMPL_JSON) as templateFile:
-                    self.template_json = json.load(templateFile)
-            else:
-                with open(SEGMENTATION_TMPL_JSON) as templateFile:
-                    self.template_json = json.load(templateFile)
+            # remove /dataset/ from the filename
+            inp_filename = filename[filename.rfind('/') + 1:len(filename)]
+            inp_props_json = json.loads(json.dumps(props))
+            for volume in inp_props_json:
+                self.input_json = json.loads(volume)
+                if self.input_json['volume_filename'].lower() == inp_filename.lower():
+                    filetype = self.input_json['volume_metadata']['type']
+                    if filetype is not None and filetype.lower() == "grayscale":
+                        with open(GRAYSCALE_TMPL_JSON) as templateFile:
+                            self.template_json = json.load(templateFile)
+                    else:
+                        with open(SEGMENTATION_TMPL_JSON) as templateFile:
+                            self.template_json = json.load(templateFile)
 
-            if self.template_json is not None:
-                for item in self.template_json['volumes']:
-                    item['volume_filename'] = item['volume_filename'] = filename[filename.rfind('/') + 1:len(filename)]
-                    item['volume_metadata']['voxel'] = self.input_json['volume_metadata']['voxel']
-                    item['volume_metadata']['bitrate'] = self.input_json['volume_metadata']['bitrate']
-                    item['volume_metadata']['xdim'] = self.input_json['volume_metadata']['xdim']
-                    item['volume_metadata']['ydim'] = self.input_json['volume_metadata']['ydim']
-                    item['volume_metadata']['zdim'] = self.input_json['volume_metadata']['zdim']
-            log.info(f'{self.template_json}')
+                    if self.template_json is not None:
+                        for item in self.template_json['volumes']:
+                            item['volume_filename'] = item['volume_filename'] = inp_filename
+                            item['volume_metadata']['voxel'] = self.input_json['volume_metadata']['voxel']
+                            item['volume_metadata']['bitrate'] = self.input_json['volume_metadata']['bitrate']
+                            item['volume_metadata']['xdim'] = self.input_json['volume_metadata']['xdim']
+                            item['volume_metadata']['ydim'] = self.input_json['volume_metadata']['ydim']
+                            item['volume_metadata']['zdim'] = self.input_json['volume_metadata']['zdim']
             return self.template_json
         except Exception as err:
             log.error(err)

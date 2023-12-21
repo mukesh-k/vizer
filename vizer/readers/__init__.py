@@ -133,7 +133,8 @@ class RawConfig:
         try:
             # map the json object from the file path
             json_data = json.load(open(filename))
-        except:
+        except Exception as err:
+            log.error(err)
             # map the json object from the input parameters
             json_data = filename
 
@@ -372,11 +373,11 @@ class Template:
                 self.input_json = json.loads(volume)
                 if self.input_json['volume_filename'].lower() == inp_filename.lower():
                     filetype = self.input_json['volume_metadata']['type']
-                    if filetype is not None and filetype.lower() == "grayscale":
-                        with open(GRAYSCALE_TMPL_JSON) as templateFile:
+                    if filetype is not None and filetype.lower() == "segmented":
+                        with open(SEGMENTATION_TMPL_JSON) as templateFile:
                             self.template_json = json.load(templateFile)
                     else:
-                        with open(SEGMENTATION_TMPL_JSON) as templateFile:
+                        with open(GRAYSCALE_TMPL_JSON) as templateFile:
                             self.template_json = json.load(templateFile)
 
                     if self.template_json is not None:
@@ -387,6 +388,7 @@ class Template:
                             item['volume_metadata']['xdim'] = self.input_json['volume_metadata']['xdim']
                             item['volume_metadata']['ydim'] = self.input_json['volume_metadata']['ydim']
                             item['volume_metadata']['zdim'] = self.input_json['volume_metadata']['zdim']
+                            item['volume_metadata']['type'] = self.input_json['volume_metadata']['type']
             return self.template_json
         except Exception as err:
             log.error(err)
